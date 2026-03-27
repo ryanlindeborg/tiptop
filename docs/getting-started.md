@@ -376,11 +376,8 @@ Open Rerun (it is automatically spawned) and check the outputs for sanity. Cruci
 plans look reasonable (do this in the "tiptop_demo" recording under the `curobo_idx` timeline (use the largest idx as
 that's the successful plan). The short video below shows how you can check TiPToP outputs in Rerun:
 
-```{raw} html
-<video width="100%" controls>
-  <source src="_static/tiptop-run.mp4" type="video/mp4">
-  Your browser does not support the video tag.
-</video>
+```{video} _static/tiptop-run.mp4
+:width: 100%
 ```
 
 ### Run the TiPToP demo and execute on the robot
