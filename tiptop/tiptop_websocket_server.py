@@ -13,8 +13,8 @@ import asyncio
 import http
 import json
 import logging
+import os
 import time
-import traceback
 from datetime import datetime
 from pathlib import Path
 
@@ -32,10 +32,10 @@ from curobo.wrap.reacher.motion_gen import MotionGen
 from tiptop.config import tiptop_cfg
 from tiptop.motion_planning import build_curobo_solvers
 from tiptop.perception.cameras import Frame
-from tiptop.planning import NumpyEncoder, build_tamp_config, run_planning, save_tiptop_plan, serialize_plan
-from tiptop.recording import save_run_outputs
+from tiptop.planning import build_tamp_config, run_planning, save_tiptop_plan, serialize_plan
+from tiptop.recording import save_run_metadata, save_run_outputs
 from tiptop.tiptop_run import Observation, run_perception
-from tiptop.utils import add_file_handler, get_robot_rerun, print_tiptop_banner, remove_file_handler, setup_logging
+from tiptop.utils import NumpyEncoder, add_file_handler, check_cutamp_version, get_robot_rerun, print_tiptop_banner, remove_file_handler, setup_logging
 
 _log = logging.getLogger(__name__)
 
@@ -157,10 +157,9 @@ class TiptopPlanningServer:
             except websockets.ConnectionClosed:
                 _log.info(f"Connection from {websocket.remote_address} closed")
                 break
-            except Exception:
-                error_msg = traceback.format_exc()
-                _log.error(f"Error processing request: {error_msg}")
-                await websocket.send(error_msg)
+            except Exception as e:
+                _log.exception("Error processing request")
+                await websocket.send(str(e))
                 await websocket.close(
                     code=websockets.frames.CloseCode.INTERNAL_ERROR,
                     reason="Internal server error. Traceback included in previous frame.",
@@ -185,24 +184,25 @@ class TiptopPlanningServer:
                 - plan: list of plan steps (trajectory or gripper actions)
                 - error: str or None
         """
-        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        now = datetime.now()
+        timestamp = now.strftime("%Y-%m-%d_%H-%M-%S")
+        iso_timestamp = now.isoformat(timespec="seconds")
         save_dir = self._output_dir / timestamp
         save_dir.mkdir(parents=True, exist_ok=True)
         file_handler = add_file_handler(save_dir / "tiptop_run.log")
 
         env = None
+        task_instruction = None
+        observation = None
         processed_scene = None
+        grounded_atoms = None
+        perception_duration = None
+        planning_duration = None
+        failure_reason = None
+        cutamp_plan = None
         try:
             # Reset collision world to clear stale cuTAMP state from previous run
             self._reset_motion_planning()
-
-            # Initialize rerun if enabled (idempotent)
-            rr.init("tiptop_server", recording_id=timestamp, spawn=self._rerun_mode == "stream")
-            if self._rerun_mode == "save":
-                rrd_path = save_dir / "tiptop.rrd"
-                rr.save(rrd_path)
-                _log.info(f"Saving Rerun stream to {rrd_path}")
-            rerun_robot = get_robot_rerun()
 
             # Extract and preprocess observation
             rgb = obs["rgb"].astype(np.uint8)
@@ -217,16 +217,25 @@ class TiptopPlanningServer:
             depth[depth < 0] = 0.0
             depth[depth > self._cfg.perception.depth_trunc_m] = 0.0
 
-            _log.info(f"Processing: RGB shape={rgb.shape}, depth shape={depth.shape}, task='{task_instruction}'")
-
             frame = Frame(serial="static", timestamp=0.0, rgb=rgb, intrinsics=K, depth=depth)
             observation = Observation(frame=frame, world_from_cam=world_from_cam, q_init=q_init)
+
+            # Initialize rerun if enabled (idempotent)
+            rr.init("tiptop_server", recording_id=timestamp, spawn=self._rerun_mode == "stream")
+            if self._rerun_mode == "save":
+                rrd_path = save_dir / "tiptop.rrd"
+                rr.save(rrd_path)
+                _log.info(f"Saving Rerun stream to {rrd_path}")
+            rerun_robot = get_robot_rerun()
+
+            _log.info(f"Processing: RGB shape={rgb.shape}, depth shape={depth.shape}, task='{task_instruction}'")
             rerun_robot.set_joint_positions(q_init)
 
             connector = aiohttp.TCPConnector(limit=10, force_close=True)
             timeout = aiohttp.ClientTimeout(total=120.0)
             async with aiohttp.ClientSession(connector=connector, timeout=timeout) as session:
-                env, all_surfaces, processed_scene = await run_perception(
+                perception_start = time.monotonic()
+                env, all_surfaces, processed_scene, grounded_atoms = await run_perception(
                     session,
                     observation,
                     task_instruction,
@@ -235,7 +244,7 @@ class TiptopPlanningServer:
                     gripper_mask=None,
                     include_workspace=self._include_workspace,
                 )
-
+                perception_duration = time.monotonic() - perception_start
             # Log camera intrinsics and pose to rerun if enabled
             rr.log("cam", rr.Pinhole(image_from_camera=K))
             rr.log(
@@ -245,7 +254,7 @@ class TiptopPlanningServer:
 
             # Run cuTAMP planning
             _log.info("Running cuTAMP planning...")
-            cutamp_plan, _, failure_reason = await asyncio.to_thread(
+            cutamp_plan, planning_duration, failure_reason = await asyncio.to_thread(
                 run_planning,
                 env,
                 self._config,
@@ -275,7 +284,9 @@ class TiptopPlanningServer:
             }
 
         except Exception as e:
-            _log.error(f"Pipeline error: {e}", exc_info=True)
+            _log.exception("Pipeline error")
+            if not failure_reason:
+                failure_reason = str(e)
             return {
                 "success": False,
                 "plan": None,
@@ -284,6 +295,18 @@ class TiptopPlanningServer:
         finally:
             if env is not None and processed_scene is not None:
                 save_run_outputs(save_dir, env, processed_scene.grasps)
+            save_run_metadata(
+                save_dir=save_dir,
+                timestamp=iso_timestamp,
+                task_instruction=task_instruction,
+                q_at_capture=observation.q_init if observation is not None else None,
+                world_from_cam=observation.world_from_cam if observation is not None else None,
+                perception_duration=perception_duration,
+                grounded_atoms=grounded_atoms,
+                planning_success=cutamp_plan is not None,
+                planning_failure_reason=failure_reason,
+                planning_duration=planning_duration,
+            )
             if file_handler is not None:
                 remove_file_handler(file_handler)
 
@@ -307,6 +330,7 @@ def _run_server(
         include_workspace: If True, include real-robot workspace cuboids in the collision world.
     """
     print_tiptop_banner()
+    check_cutamp_version()
     setup_logging()
     logging.getLogger("websockets.server").setLevel(logging.INFO)
 
@@ -318,7 +342,18 @@ def _run_server(
         rerun_mode=rerun_mode,
         include_workspace=include_workspace,
     )
-    server.serve_forever()
+    exit_code = 1
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        _log.info("Shutting down server (Ctrl+C)")
+        exit_code = 0
+    except Exception:
+        _log.exception("Server failed")
+    finally:
+        rr.disconnect()
+        # Force exit to avoid segfault during GPU resource cleanup (CUDA/Warp/cuRobo destructors)
+        os._exit(exit_code)
 
 
 def entrypoint():

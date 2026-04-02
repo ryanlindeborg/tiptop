@@ -2,6 +2,7 @@ import asyncio
 import logging
 import shutil
 import signal
+import sys
 import time
 from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass
@@ -42,10 +43,16 @@ from tiptop.perception.segmentation import segment_pointcloud_by_masks, segment_
 from tiptop.perception.utils import convert_trimesh_box_to_curobo_cuboid, convert_trimesh_to_curobo_mesh
 from tiptop.perception_wrapper import detect_and_segment, predict_depth_and_grasps
 from tiptop.planning import build_tamp_config, run_planning, save_tiptop_plan, serialize_plan
-from tiptop.recording import record_cameras, save_perception_outputs, save_run_outputs
+from tiptop.recording import (
+    record_cameras,
+    save_perception_outputs,
+    save_run_metadata,
+    save_run_outputs,
+)
 from tiptop.utils import (
     RobotClient,
     add_file_handler,
+    check_cutamp_version,
     get_robot_client,
     get_robot_rerun,
     load_gripper_mask,
@@ -72,7 +79,7 @@ class Observation:
 
     frame: Frame
     world_from_cam: Float[np.ndarray, "4 4"]
-    q_init: Float[np.ndarray, "n"]
+    q_init: Float[np.ndarray | list, "n"]
 
 
 @dataclass(frozen=True)
@@ -432,7 +439,7 @@ async def run_perception(
     gripper_mask: Bool[np.ndarray, "h w"] | None = None,
     include_workspace: bool = True,
     log_to_rerun: bool = True,
-) -> tuple[TAMPEnvironment, list, ProcessedScene]:
+) -> tuple[TAMPEnvironment, list, ProcessedScene, list[dict]]:
     start_time = time.perf_counter()
 
     frame = observation.frame
@@ -466,8 +473,8 @@ async def run_perception(
         depth_results["rgb_map"],
         detection_results["bboxes"],
         detection_results["masks"],
-        task_instruction,
         save_dir,
+        gripper_mask,
     )
 
     if log_to_rerun:
@@ -503,7 +510,7 @@ async def run_perception(
     )
     _log.info(f"Processing scene and perception results took {time.perf_counter() - proc_st:.2f}s")
     _log.info(f"Perception pipeline completed, took {time.perf_counter() - start_time:.2f}s")
-    return env, all_surfaces, processed_scene
+    return env, all_surfaces, processed_scene, detection_results["grounded_atoms"]
 
 
 async def async_entrypoint(container: _DemoContainer, config: TAMPConfiguration, output_dir: str, execute_plan: bool):
@@ -526,6 +533,7 @@ async def async_entrypoint(container: _DemoContainer, config: TAMPConfiguration,
 
                 now = datetime.now()
                 timestamp = now.strftime("%Y-%m-%d_%H-%M-%S")
+                iso_timestamp = now.isoformat(timespec="seconds")
                 date_str = now.strftime("%Y-%m-%d")
                 rr.init("tiptop_run", recording_id=timestamp, spawn=True)
                 # Log workspace for visualization purposes
@@ -545,8 +553,8 @@ async def async_entrypoint(container: _DemoContainer, config: TAMPConfiguration,
 
                     # Now we're ready! Start timing
                     _log.info("Running Perception...")
-                    start_time = time.perf_counter()
-                    env, all_surfaces, processed_scene = await run_perception(
+                    perception_start = time.perf_counter()
+                    env, all_surfaces, processed_scene, grounded_atoms = await run_perception(
                         session,
                         observation,
                         task_instruction,
@@ -554,10 +562,14 @@ async def async_entrypoint(container: _DemoContainer, config: TAMPConfiguration,
                         depth_estimator=container.depth_estimator,
                         gripper_mask=container.gripper_mask,
                     )
+                    perception_duration = time.perf_counter() - perception_start
 
+                    cutamp_plan = None
+                    planning_duration = None
+                    failure_reason = None
                     try:
                         _log.info("Running Planning...")
-                        cutamp_plan, _, failure_reason = run_planning(
+                        cutamp_plan, planning_duration, failure_reason = run_planning(
                             env,
                             config,
                             q_init=observation.q_init,
@@ -567,8 +579,7 @@ async def async_entrypoint(container: _DemoContainer, config: TAMPConfiguration,
                             all_surfaces=all_surfaces,
                             experiment_dir=save_dir / "cutamp",
                         )
-                        perception_and_cutamp_duration = time.perf_counter() - start_time
-                        _log.info(f"Perception and cuTAMP planning took: {perception_and_cutamp_duration:.2f}s")
+                        _log.info(f"Perception and cuTAMP planning took: {perception_duration + planning_duration:.2f}s")
                         if cutamp_plan is not None:
                             plan_path = save_dir / "tiptop_plan.json"
                             save_tiptop_plan(serialize_plan(cutamp_plan, observation.q_init), plan_path)
@@ -601,12 +612,27 @@ async def async_entrypoint(container: _DemoContainer, config: TAMPConfiguration,
 
                         _log.debug(f"Finished run for instruction: {task_instruction}")
                     finally:
-                        # Always save env and grasps, regardless of planning/execution success
+                        # Always save env, grasps, metadata, and artifacts regardless of success
                         save_run_outputs(save_dir, env, processed_scene.grasps)
+                        save_run_metadata(
+                            save_dir=save_dir,
+                            timestamp=iso_timestamp,
+                            task_instruction=task_instruction,
+                            q_at_capture=observation.q_init,
+                            world_from_cam=observation.world_from_cam,
+                            perception_duration=perception_duration,
+                            grounded_atoms=grounded_atoms,
+                            planning_success=cutamp_plan is not None,
+                            planning_failure_reason=failure_reason,
+                            planning_duration=planning_duration,
+                        )
                         _log.info(f"Logs, results, and visualizations saved to {save_dir}")
 
                     if execute_plan:
                         _label_rollout(save_dir, output_dir, date_str, timestamp)
+                except Exception:
+                    _log.exception("TiPToP run failed")
+                    raise
                 finally:
                     # Always remove the file handler after the run
                     remove_file_handler(file_handler)
@@ -644,6 +670,7 @@ def _sync_entrypoint(
     assert num_particles > 0
 
     print_tiptop_banner()
+    check_cutamp_version()
 
     cfg = tiptop_cfg()
     config = build_tamp_config(
@@ -665,25 +692,26 @@ def _sync_entrypoint(
         max_workers=4, initializer=signal.signal, initargs=(signal.SIGINT, signal.SIG_IGN)
     )
 
+    exit_code = 1
     try:
         asyncio.run(async_entrypoint(container, config, output_dir, execute_plan))
+        exit_code = 0
     except (UserExitException, KeyboardInterrupt) as e:
         if isinstance(e, KeyboardInterrupt):
             _log.info("Interrupted during startup/shutdown (Ctrl+C)")
         else:
             _log.debug("Exit detected")
-    except Exception:
-        _log.error("Unexpected error detected", exc_info=True)
-        raise
+        exit_code = 0
     finally:
         if container is not None:
-            _log.info("Tearing down cameras and robot...")
+            _log.debug("Tearing down cameras and robot...")
             container.cam.close()
             if container.external_cam is not None:
                 container.external_cam.close()
             container.robot.close()
         if _executor_pool is not None:
             _executor_pool.shutdown(wait=False, cancel_futures=True)
+        sys.exit(exit_code)
 
 
 def entrypoint():

@@ -1,7 +1,11 @@
 
+[build-system]
+requires = ["setuptools>=64", "setuptools_scm>=8"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "tiptop"
-version = "0.0.1"
+dynamic = ["version"]
 description = "TiPToP"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -70,6 +74,7 @@ get-joint-positions = "tiptop.scripts.get_observation:get_joint_positions"
 viz-calibration = "tiptop.scripts.viz_calibration:viz_calibration_entrypoint"
 viz-gripper-cam = "tiptop.scripts.viz_gripper_cam:viz_gripper_cam_entrypoint"
 viz-scene = "tiptop.scripts.viz_scene:viz_scene_entrypoint"
+viz-tiptop-run = "tiptop.scripts.viz_tiptop_run:viz_tiptop_run_entrypoint"
 
 # Moving robot and gripper
 go-home = "tiptop.scripts.go_to_conf:go_to_home_entrypoint"
@@ -88,3 +93,7 @@ tiptop-server = "tiptop.tiptop_websocket_server:entrypoint"
 
 [tool.setuptools.packages]
 find = { include = ["tiptop", "tiptop.*"] }
+
+[tool.setuptools_scm]
+version_scheme = "no-guess-dev"
+local_scheme = "node-and-date"

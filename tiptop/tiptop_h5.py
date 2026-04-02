@@ -7,6 +7,7 @@ without a real robot, saving a serialized plan JSON file for downstream evaluati
 import asyncio
 import logging
 import os
+import time
 from datetime import datetime
 from pathlib import Path
 
@@ -21,9 +22,9 @@ from tiptop.config import tiptop_cfg
 from tiptop.motion_planning import build_curobo_solvers
 from tiptop.perception.cameras import Frame
 from tiptop.planning import build_tamp_config, run_planning, save_tiptop_plan, serialize_plan
-from tiptop.recording import save_run_outputs
+from tiptop.recording import save_run_metadata, save_run_outputs
 from tiptop.tiptop_run import Observation, run_perception
-from tiptop.utils import add_file_handler, get_robot_rerun, print_tiptop_banner, remove_file_handler, setup_logging
+from tiptop.utils import add_file_handler, check_cutamp_version, get_robot_rerun, print_tiptop_banner, remove_file_handler, setup_logging
 
 _log = logging.getLogger(__name__)
 
@@ -112,6 +113,7 @@ def _run_h5(
         raise ValueError("--task-instruction is required")
 
     print_tiptop_banner()
+    check_cutamp_version()
 
     cfg = tiptop_cfg()
     config = build_tamp_config(
@@ -132,11 +134,12 @@ def _run_h5(
     robot_rr = get_robot_rerun()
     robot_rr.set_joint_positions(observation.q_init)
 
-    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    save_dir = Path(output_dir) / timestamp
+    timestamp = datetime.now()
+    save_dir = Path(output_dir) / timestamp.strftime("%Y-%m-%d_%H-%M-%S")
     save_dir.mkdir(parents=True, exist_ok=True)
     file_handler = add_file_handler(save_dir / "tiptop_run.log")
 
+    exit_code = 1
     try:
 
         async def _run_perception():
@@ -154,11 +157,15 @@ def _run_h5(
                 )
 
         _log.info("Running perception pipeline...")
-        env, all_surfaces, processed_scene = asyncio.run(_run_perception())
-
+        perception_start = time.perf_counter()
+        env, all_surfaces, processed_scene, grounded_atoms = asyncio.run(_run_perception())
+        perception_duration = time.perf_counter() - perception_start
         _log.info("Planning with cuTAMP...")
+        cutamp_plan = None
+        planning_duration = None
+        failure_reason = None
         try:
-            cutamp_plan, _, failure_reason = run_planning(
+            cutamp_plan, planning_duration, failure_reason = run_planning(
                 env,
                 config,
                 observation.q_init,
@@ -170,6 +177,18 @@ def _run_h5(
             )
         finally:
             save_run_outputs(save_dir, env, processed_scene.grasps)
+            save_run_metadata(
+                save_dir=save_dir,
+                timestamp=timestamp.isoformat(timespec="seconds"),
+                task_instruction=task_instruction,
+                q_at_capture=observation.q_init,
+                world_from_cam=observation.world_from_cam,
+                perception_duration=perception_duration,
+                grounded_atoms=grounded_atoms,
+                planning_success=cutamp_plan is not None,
+                planning_failure_reason=failure_reason,
+                planning_duration=planning_duration,
+            )
 
         if cutamp_plan is not None:
             plan_path = save_dir / "tiptop_plan.json"
@@ -179,15 +198,19 @@ def _run_h5(
             _log.warning(f"No plan found: {failure_reason}")
 
         _log.info(f"Saved outputs to {save_dir}")
+    except Exception:
+        _log.exception("TiPToP run failed")
+    else:
+        exit_code = 0
     finally:
         remove_file_handler(file_handler)
+        rr.disconnect()
+        # Force exit to avoid segfault during GPU resource cleanup (CUDA/Warp/cuRobo destructors)
+        os._exit(exit_code)
 
 
 def entrypoint():
     tyro.cli(_run_h5)
-    rr.disconnect()
-    # Force exit to avoid segfault during GPU resource cleanup (CUDA/Warp/cuRobo destructors)
-    os._exit(0)
 
 
 if __name__ == "__main__":

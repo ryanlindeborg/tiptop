@@ -1,3 +1,4 @@
+import json
 import logging
 import sys
 from contextlib import contextmanager
@@ -22,9 +23,33 @@ from tiptop.ur5.ur5_client import UR5Client
 
 gripper_mask_path = config_dir / "assets" / "gripper_mask.png"
 
+REQUIRED_CUTAMP_VERSION = "0.0.2"
+
+
+def check_cutamp_version() -> None:
+    """Raise RuntimeError if the installed cuTAMP version does not match REQUIRED_CUTAMP_VERSION."""
+    try:
+        import cutamp
+
+        version = cutamp.__version__
+    except AttributeError:
+        version = "<0.0.2"
+    if version != REQUIRED_CUTAMP_VERSION:
+        raise RuntimeError(
+            f"cuTAMP version mismatch: required {REQUIRED_CUTAMP_VERSION}, found {version}. "
+            "Please run: pixi run install-cutamp"
+        )
+
 
 class ServerHealthCheckError(Exception):
     """Raised when a server health check fails."""
+
+
+class NumpyEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, np.ndarray):
+            return obj.tolist()
+        return super().default(obj)
 
 
 @cache
@@ -70,21 +95,22 @@ def get_robot_client() -> RobotClient:
         raise ValueError(f"Unknown robot type: {cfg.robot.type}")
 
 
-def get_robot_rerun() -> RerunRobot:
+def get_robot_rerun(robot_type: str | None = None) -> RerunRobot:
     """Get a RerunRobot instance for the robot."""
-    cfg = tiptop_cfg()
-    if cfg.robot.type == "fr3_robotiq":
+    if robot_type is None:
+        robot_type = tiptop_cfg().robot.type
+    if robot_type == "fr3_robotiq":
         return load_fr3_robotiq_rerun()
-    elif cfg.robot.type == "panda_robotiq":
+    elif robot_type == "panda_robotiq":
         return load_panda_robotiq_rerun()
-    elif cfg.robot.type == "panda":
+    elif robot_type == "panda":
         return load_franka_rerun()
-    elif cfg.robot.type == "fr3":
+    elif robot_type == "fr3":
         return load_fr3_franka_rerun()
-    elif cfg.robot.type == "ur5":
+    elif robot_type == "ur5":
         return load_ur5_rerun()
     else:
-        raise ValueError(f"Unknown robot type: {cfg.robot.type}")
+        raise ValueError(f"Unknown robot type: {robot_type}")
 
 
 def load_gripper_mask() -> Bool[np.ndarray, "h w"]:
@@ -117,7 +143,10 @@ def setup_logging(level: int = logging.INFO):
 
             # Manually build the formatted string with colors
             log_time = self.formatTime(record, self.datefmt)
-            return f"{log_time} - {record.name} - {colored_levelname} - {record.getMessage()}"
+            message = f"{log_time} - {record.name} - {colored_levelname} - {record.getMessage()}"
+            if record.exc_info:
+                message = message + "\n" + self.formatException(record.exc_info)
+            return message
 
     # Define the log format
     log_format = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
