@@ -49,6 +49,10 @@ sam-server = [
     "pydantic",
     "uvicorn",
 ]
+test = [
+    "pytest>=9.0.2,<10",
+    "gdown>=5.2.1,<6",
+]
 dev = [
     "pre-commit",
     "ruff",
@@ -90,6 +94,11 @@ tiptop-h5 = "tiptop.tiptop_h5:entrypoint"
 
 # tiptop as a service
 tiptop-server = "tiptop.tiptop_websocket_server:entrypoint"
+
+[tool.pytest.ini_options]
+markers = [
+    "integration: requires M2T2 server and GOOGLE_API_KEY",
+]
 
 [tool.setuptools.packages]
 find = { include = ["tiptop", "tiptop.*"] }

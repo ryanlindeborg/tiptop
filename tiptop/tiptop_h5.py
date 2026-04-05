@@ -24,7 +24,14 @@ from tiptop.perception.cameras import Frame
 from tiptop.planning import build_tamp_config, run_planning, save_tiptop_plan, serialize_plan
 from tiptop.recording import save_run_metadata, save_run_outputs
 from tiptop.tiptop_run import Observation, run_perception
-from tiptop.utils import add_file_handler, check_cutamp_version, get_robot_rerun, print_tiptop_banner, remove_file_handler, setup_logging
+from tiptop.utils import (
+    add_file_handler,
+    check_cutamp_version,
+    get_robot_rerun,
+    print_tiptop_banner,
+    remove_file_handler,
+    setup_logging,
+)
 
 _log = logging.getLogger(__name__)
 
@@ -81,7 +88,7 @@ def load_h5_observation(h5_path: Path) -> Observation:
     return Observation(frame=frame, world_from_cam=world_from_cam, q_init=q_init.astype(np.float32))
 
 
-def _run_h5(
+def run_tiptop_h5(
     h5_path: str,
     task_instruction: str,
     output_dir: str = "tiptop_h5_outputs",
@@ -139,7 +146,6 @@ def _run_h5(
     save_dir.mkdir(parents=True, exist_ok=True)
     file_handler = add_file_handler(save_dir / "tiptop_run.log")
 
-    exit_code = 1
     try:
 
         async def _run_perception():
@@ -198,19 +204,20 @@ def _run_h5(
             _log.warning(f"No plan found: {failure_reason}")
 
         _log.info(f"Saved outputs to {save_dir}")
-    except Exception:
-        _log.exception("TiPToP run failed")
-    else:
-        exit_code = 0
     finally:
         remove_file_handler(file_handler)
         rr.disconnect()
-        # Force exit to avoid segfault during GPU resource cleanup (CUDA/Warp/cuRobo destructors)
-        os._exit(exit_code)
 
 
 def entrypoint():
-    tyro.cli(_run_h5)
+    """CLI entrypoint wrapper. Calls run_tiptop_h5 and force-exits to avoid GPU cleanup segfaults."""
+    try:
+        tyro.cli(run_tiptop_h5)
+    except Exception:
+        _log.exception("TiPToP run failed")
+        os._exit(1)
+    else:
+        os._exit(0)
 
 
 if __name__ == "__main__":
