@@ -333,10 +333,10 @@ def _load_cutamp_config(run_dir: Path) -> dict:
     return OmegaConf.to_container(OmegaConf.load(config_path))
 
 
-def rerun_tiptop(
+def run_tiptop_rerun(
     run_dir: str,
     task_instruction: str | None = None,
-    output_dir: str = "tiptop_rerun_outputs",
+    output_dir: str = "tiptop_offline_outputs",
     max_planning_time: float | None = None,
     opt_steps_per_skeleton: int | None = None,
     num_particles: int | None = None,
@@ -394,7 +394,7 @@ def rerun_tiptop(
 def rerun_entrypoint():
     """CLI entrypoint for tiptop-rerun. Force-exits to avoid GPU cleanup segfaults."""
     try:
-        tyro.cli(rerun_tiptop)
+        tyro.cli(run_tiptop_rerun)
     except Exception:
         _log.exception("TiPToP rerun failed")
         os._exit(1)
