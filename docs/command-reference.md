@@ -84,7 +84,7 @@ After warmup and health checks you'll be prompted to enter a natural language ta
 
 ### tiptop-h5
 
-Offline evaluation mode. Loads a pre-recorded RGB-D observation from an H5 file (droid-sim-evals format), runs perception and planning without a real robot, and saves the resulting plan as a JSON file for downstream evaluation.
+Offline evaluation mode. Loads a pre-recorded RGB-D observation from an H5 file (droid-sim-evals format) and runs the TiPToP pipeline without a real robot, saving a serialized plan JSON for downstream evaluation.
 
 **Prerequisites:**
 - M2T2 server must be running
@@ -120,7 +120,7 @@ tiptop-h5 \
 
 ### tiptop-rerun
 
-Re-runs the TiPToP perception and planning pipeline from a saved run directory. Loads the observation (RGB, depth, intrinsics, camera pose, joint positions, and gripper mask) from a previous run and feeds it back through the full pipeline. Task instruction and planning parameters default to the original run's values but can be overridden.
+Re-runs TiPToP from a saved run directory. Loads the observation (RGB, depth, intrinsics, camera pose, joint positions, and gripper mask) from a previous run. Task instruction and planning parameters default to the original run's values but can be overridden.
 
 **Prerequisites:**
 - M2T2 server must be running

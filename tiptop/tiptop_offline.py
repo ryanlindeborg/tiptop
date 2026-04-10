@@ -1,8 +1,8 @@
-"""Offline TiPToP runner: perception + planning from an Observation, without a real robot.
+"""Offline TiPToP pipeline (no real robot).
 
 Provides run_tiptop() for general use, with two CLI entrypoints:
 - run_tiptop_h5(): loads from an H5 file (tiptop-h5 command)
-- rerun_tiptop(): loads from a saved run directory (tiptop-rerun command)
+- run_tiptop_rerun(): loads from a saved run directory (tiptop-rerun command)
 """
 
 import asyncio
@@ -54,7 +54,7 @@ def run_tiptop(
     cutamp_visualize: bool = False,
     rr_spawn: bool = True,
 ):
-    """Run TiPToP perception + planning from an observation.
+    """Run the TiPToP pipeline from an observation.
 
     Args:
         observation: Pre-built observation (from H5, a previous run, etc.).
@@ -226,7 +226,7 @@ def run_tiptop_h5(
     cutamp_visualize: bool = False,
     rr_spawn: bool = True,
 ):
-    """Load an H5 observation and run TiPToP perception + planning.
+    """Load an H5 observation and run the TiPToP pipeline.
 
     Args:
         h5_path: Path to H5 observation file.
@@ -345,7 +345,6 @@ def run_tiptop_rerun(
 ):
     """Re-run TiPToP from a saved run directory.
 
-    Loads the observation from a previous run and runs perception + planning.
     The task instruction and planning parameters default to those from the original run
     but can be overridden.
 
