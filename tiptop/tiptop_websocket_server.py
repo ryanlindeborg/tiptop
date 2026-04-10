@@ -83,6 +83,7 @@ class TiptopPlanningServer:
             time_dilation_factor=self._cfg.robot.time_dilation_factor,
         )
         self._output_dir = Path("tiptop_server_outputs")
+        self._pipeline_lock = asyncio.Lock()
 
     def _reset_motion_planning(self) -> None:
         """Reset collision world to initial state to clear stale cached state between runs."""
@@ -141,9 +142,10 @@ class TiptopPlanningServer:
 
                 _log.info(f"Received planning request: task='{obs.get('task', 'unknown')}'")
 
-                # Run the full pipeline
+                # Run the full pipeline (one at a time to protect shared GPU state)
                 infer_start = time.monotonic()
-                result = await self._run_pipeline(obs)
+                async with self._pipeline_lock:
+                    result = await self._run_pipeline(obs)
                 infer_time = time.monotonic() - infer_start
 
                 # Add timing info
