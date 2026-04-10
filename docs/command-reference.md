@@ -142,11 +142,11 @@ Re-runs the TiPToP perception and planning pipeline from a saved run directory. 
 
 ```bash
 # Re-run from a previous run with original parameters
-tiptop-rerun --run-dir tiptop_offline_outputs/2026-04-05_13-30-20/
+tiptop-rerun --run-dir tiptop_outputs/eval/2026-04-05_13-30-20/
 
 # Re-run with a different task instruction
 tiptop-rerun \
-  --run-dir tiptop_offline_outputs/2026-04-05_13-30-20/ \
+  --run-dir tiptop_outputs/eval/2026-04-05_13-30-20/ \
   --task-instruction "put the cube on the table"
 
 # Re-run with more particles and longer planning time
