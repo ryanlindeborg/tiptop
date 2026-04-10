@@ -94,7 +94,7 @@ Offline evaluation mode. Loads a pre-recorded RGB-D observation from an H5 file 
 
 - `--h5-path STR` - Path to H5 observation file (required)
 - `--task-instruction STR` - Natural language task instruction, e.g. `"put the cube in the bowl"` (required)
-- `--output-dir STR` - Top-level directory to save results; a timestamped subdirectory will be created (default: "tiptop_h5_outputs")
+- `--output-dir STR` - Top-level directory to save results; a timestamped subdirectory will be created (default: "tiptop_offline_outputs")
 - `--max-planning-time FLOAT` - Maximum time to spend planning with cuTAMP across all skeletons in seconds (default: 60.0)
 - `--opt-steps-per-skeleton INT` - Number of optimization steps per skeleton in cuTAMP (default: 500)
 - `--num-particles INT` - Number of particles for cuTAMP; decrease if running out of GPU memory (default: 256)
@@ -131,7 +131,7 @@ Re-runs the TiPToP perception and planning pipeline from a saved run directory. 
 
 - `--run-dir STR` - Path to a saved TiPToP run directory (required)
 - `--task-instruction STR` - Task instruction override; defaults to the original run's instruction
-- `--output-dir STR` - Top-level directory to save results; a timestamped subdirectory will be created (default: "tiptop_rerun_outputs")
+- `--output-dir STR` - Top-level directory to save results; a timestamped subdirectory will be created (default: "tiptop_offline_outputs")
 - `--max-planning-time FLOAT` - Override max planning time; defaults to the original run's value
 - `--opt-steps-per-skeleton INT` - Override optimization steps per skeleton; defaults to the original run's value
 - `--num-particles INT` - Override number of particles; defaults to the original run's value
@@ -142,11 +142,11 @@ Re-runs the TiPToP perception and planning pipeline from a saved run directory. 
 
 ```bash
 # Re-run from a previous run with original parameters
-tiptop-rerun --run-dir tiptop_h5_outputs/2026-04-05_13-30-20/
+tiptop-rerun --run-dir tiptop_offline_outputs/2026-04-05_13-30-20/
 
 # Re-run with a different task instruction
 tiptop-rerun \
-  --run-dir tiptop_h5_outputs/2026-04-05_13-30-20/ \
+  --run-dir tiptop_offline_outputs/2026-04-05_13-30-20/ \
   --task-instruction "put the cube on the table"
 
 # Re-run with more particles and longer planning time

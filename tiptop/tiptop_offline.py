@@ -219,7 +219,7 @@ def load_h5_observation(h5_path: Path) -> Observation:
 def run_tiptop_h5(
     h5_path: str,
     task_instruction: str,
-    output_dir: str = "tiptop_h5_outputs",
+    output_dir: str = "tiptop_offline_outputs",
     max_planning_time: float = 60.0,
     opt_steps_per_skeleton: int = 500,
     num_particles: int = 256,
