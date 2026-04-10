@@ -40,9 +40,6 @@ from tiptop.utils import (
 _log = logging.getLogger(__name__)
 
 
-# --- Core pipeline ---
-
-
 def run_tiptop(
     observation: Observation,
     task_instruction: str,
@@ -161,9 +158,6 @@ def run_tiptop(
         rr.disconnect()
 
 
-# --- H5 observation loading ---
-
-
 def load_h5_observation(h5_path: Path) -> Observation:
     """Load an observation from an H5 file (pi-sim-evals format).
 
@@ -264,9 +258,6 @@ def h5_entrypoint():
         os._exit(0)
 
 
-# --- Saved run observation loading ---
-
-
 def load_observation_from_run(run_dir: Path) -> tuple[Observation, np.ndarray | None, dict]:
     """Load an Observation and optional gripper mask from a saved TiPToP run directory.
 
@@ -325,14 +316,6 @@ def load_observation_from_run(run_dir: Path) -> tuple[Observation, np.ndarray | 
     return observation, gripper_mask, metadata
 
 
-def _load_cutamp_config(run_dir: Path) -> dict:
-    """Load the cuTAMP config from a saved run directory."""
-    config_path = run_dir / "cutamp" / "config.yml"
-    if not config_path.exists():
-        raise FileNotFoundError(f"Could not find cuTAMP config at {config_path}")
-    return OmegaConf.to_container(OmegaConf.load(config_path))
-
-
 def run_tiptop_rerun(
     run_dir: str,
     task_instruction: str | None = None,
@@ -362,7 +345,11 @@ def run_tiptop_rerun(
     print_tiptop_banner()
     run_dir_path = Path(run_dir)
     observation, gripper_mask, metadata = load_observation_from_run(run_dir_path)
-    cutamp_config = _load_cutamp_config(run_dir_path)
+
+    cutamp_config_path = run_dir_path / "cutamp" / "config.yml"
+    if not cutamp_config_path.exists():
+        raise FileNotFoundError(f"Could not find cuTAMP config at {cutamp_config_path}")
+    cutamp_config = OmegaConf.to_container(OmegaConf.load(cutamp_config_path))
 
     if task_instruction is None:
         task_instruction = metadata["task_instruction"]
