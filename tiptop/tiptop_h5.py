@@ -1,7 +1,6 @@
-"""Offline H5 evaluation mode for TiPToP.
+"""Offline TiPToP runner: perception + planning from an Observation, without a real robot.
 
-Loads observations from H5 files (pi-sim-evals format) and runs perception + planning
-without a real robot, saving a serialized plan JSON file for downstream evaluation.
+Provides run_tiptop() for general use and run_tiptop_h5() for the H5-specific CLI entrypoint.
 """
 
 import asyncio
@@ -88,27 +87,27 @@ def load_h5_observation(h5_path: Path) -> Observation:
     return Observation(frame=frame, world_from_cam=world_from_cam, q_init=q_init.astype(np.float32))
 
 
-def run_tiptop_h5(
-    h5_path: str,
+def run_tiptop(
+    observation: Observation,
     task_instruction: str,
-    output_dir: str = "tiptop_h5_outputs",
-    max_planning_time: float = 60.0,
-    opt_steps_per_skeleton: int = 500,
-    num_particles: int = 256,
+    output_dir: str,
+    max_planning_time: float,
+    opt_steps_per_skeleton: int,
+    num_particles: int,
+    gripper_mask: np.ndarray | None = None,
     cutamp_visualize: bool = False,
     rr_spawn: bool = True,
 ):
-    """
-    TiPToP offline runner. Loads an H5 observation file and runs perception + planning,
-    saving a serialized plan JSON file for downstream evaluation.
+    """Run TiPToP perception + planning from an observation.
 
     Args:
-        h5_path: Path to H5 observation file.
+        observation: Pre-built observation (from H5, a previous run, etc.).
         task_instruction: Task instruction (e.g. 'put the cube in the bowl').
         output_dir: Top-level directory to save outputs; a timestamped subdirectory is created per run.
         max_planning_time: Maximum time to spend planning with cuTAMP across all skeletons (approximate).
         opt_steps_per_skeleton: Number of optimization steps per skeleton in cuTAMP.
         num_particles: Number of particles for cuTAMP; decrease if running out of GPU memory.
+        gripper_mask: Optional boolean mask for gripper pixels in the image.
         cutamp_visualize: Whether to visualize cuTAMP optimization.
         rr_spawn: Whether to spawn a Rerun viewer.
     """
@@ -117,9 +116,8 @@ def run_tiptop_h5(
     assert num_particles > 0
 
     if not task_instruction:
-        raise ValueError("--task-instruction is required")
+        raise ValueError("task_instruction is required")
 
-    print_tiptop_banner()
     check_cutamp_version()
 
     cfg = tiptop_cfg()
@@ -133,11 +131,9 @@ def run_tiptop_h5(
         enable_visualizer=cutamp_visualize,
     )
 
-    setup_logging(level=logging.INFO)
     ik_solver, motion_gen, _ = build_curobo_solvers(num_particles, config.coll_n_spheres, include_workspace=False)
 
-    rr.init("tiptop_h5_run", spawn=rr_spawn)
-    observation = load_h5_observation(Path(h5_path))
+    rr.init("tiptop_run", spawn=rr_spawn)
     robot_rr = get_robot_rerun()
     robot_rr.set_joint_positions(observation.q_init)
 
@@ -158,7 +154,7 @@ def run_tiptop_h5(
                     task_instruction,
                     save_dir,
                     depth_estimator=None,
-                    gripper_mask=None,
+                    gripper_mask=gripper_mask,
                     include_workspace=False,
                 )
 
@@ -207,6 +203,43 @@ def run_tiptop_h5(
     finally:
         remove_file_handler(file_handler)
         rr.disconnect()
+
+
+def run_tiptop_h5(
+    h5_path: str,
+    task_instruction: str,
+    output_dir: str = "tiptop_h5_outputs",
+    max_planning_time: float = 60.0,
+    opt_steps_per_skeleton: int = 500,
+    num_particles: int = 256,
+    cutamp_visualize: bool = False,
+    rr_spawn: bool = True,
+):
+    """Load an H5 observation and run TiPToP perception + planning.
+
+    Args:
+        h5_path: Path to H5 observation file.
+        task_instruction: Task instruction (e.g. 'put the cube in the bowl').
+        output_dir: Top-level directory to save outputs; a timestamped subdirectory is created per run.
+        max_planning_time: Maximum time to spend planning with cuTAMP across all skeletons (approximate).
+        opt_steps_per_skeleton: Number of optimization steps per skeleton in cuTAMP.
+        num_particles: Number of particles for cuTAMP; decrease if running out of GPU memory.
+        cutamp_visualize: Whether to visualize cuTAMP optimization.
+        rr_spawn: Whether to spawn a Rerun viewer.
+    """
+    setup_logging(level=logging.INFO)
+    print_tiptop_banner()
+    observation = load_h5_observation(Path(h5_path))
+    run_tiptop(
+        observation=observation,
+        task_instruction=task_instruction,
+        output_dir=output_dir,
+        max_planning_time=max_planning_time,
+        opt_steps_per_skeleton=opt_steps_per_skeleton,
+        num_particles=num_particles,
+        cutamp_visualize=cutamp_visualize,
+        rr_spawn=rr_spawn,
+    )
 
 
 def entrypoint():
