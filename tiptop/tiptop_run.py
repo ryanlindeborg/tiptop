@@ -241,7 +241,8 @@ def create_tamp_environment(
         if label in surface_labels:
             # Use AABB cuboid for surfaces: convex hull meshes cause false collisions when
             # other objects rest on or near the surface (they appear inside the hull volume).
-            surfaces.append(convert_mesh_to_aabb_cuboid(mesh))
+            # surfaces.append(convert_mesh_to_aabb_cuboid(mesh))
+            surfaces.append(mesh)
         else:
             movables.append(mesh)
     _log.info(f"Movables: {[m.name for m in movables]}")

@@ -379,7 +379,7 @@ def _run_server(
     """
     print_tiptop_banner()
     check_cutamp_version()
-    setup_logging()
+    setup_logging(level=logging.DEBUG)
     cfg = tiptop_cfg(force_reload=True)
     cfg.perception.m2t2.apply_bounds = m2t2_apply_bounds
     logging.getLogger("websockets.server").setLevel(logging.INFO)
