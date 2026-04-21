@@ -219,6 +219,7 @@ def save_run_outputs(save_dir: Path, env, grasps: dict) -> None:
 
 def save_run_metadata(
     save_dir: Path,
+    run_id: str,
     timestamp: str,
     task_instruction: str | None,
     q_at_capture: np.ndarray | list | None,
@@ -237,6 +238,7 @@ def save_run_metadata(
             (save_dir / "git.diff").write_text(diff, encoding="utf-8")
 
     metadata = {
+        "run_id": run_id,
         "task_instruction": task_instruction,
         "timestamp": timestamp,
         "observation": {

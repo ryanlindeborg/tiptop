@@ -15,6 +15,7 @@ import json
 import logging
 import os
 import time
+import uuid
 from datetime import datetime
 from pathlib import Path
 
@@ -140,7 +141,9 @@ class TiptopPlanningServer:
                 obs = msgpack_numpy.unpackb(raw_data)
                 # obs["task"] = "pick up the cup and put it on the table"  # TODO: remove hardcode
 
-                _log.info(f"Received planning request: task='{obs.get('task', 'unknown')}'")
+                run_id = str(obs.get("run_id") or uuid.uuid4())
+                obs["run_id"] = run_id  # normalize so _run_pipeline sees the same value
+                _log.info(f"[run_id={run_id}] Received planning request: task='{obs.get('task', 'unknown')}'")
 
                 # Run the full pipeline (one at a time to protect shared GPU state)
                 infer_start = time.monotonic()
@@ -156,7 +159,7 @@ class TiptopPlanningServer:
 
                 # Send result back as JSON
                 await websocket.send(json.dumps(result, cls=NumpyEncoder))
-                _log.info(f"Sent planning result: success={result['success']}, time={infer_time:.2f}s")
+                _log.info(f"[run_id={run_id}] Sent planning result: success={result['success']}, time={infer_time:.2f}s")
 
             except websockets.ConnectionClosed:
                 _log.info(f"Connection from {websocket.remote_address} closed")
@@ -188,10 +191,11 @@ class TiptopPlanningServer:
                 - plan: list of plan steps (trajectory or gripper actions)
                 - error: str or None
         """
+        run_id = obs["run_id"]
         now = datetime.now()
         timestamp = now.strftime("%Y-%m-%d_%H-%M-%S")
         iso_timestamp = now.isoformat(timespec="seconds")
-        save_dir = self._output_dir / timestamp
+        save_dir = self._output_dir / run_id
         save_dir.mkdir(parents=True, exist_ok=True)
         file_handler = add_file_handler(save_dir / "tiptop_run.log")
 
@@ -240,14 +244,14 @@ class TiptopPlanningServer:
             # Initialize rerun if enabled (idempotent)
             rerun_robot = None
             if self._rerun_mode != "disabled":
-                rr.init("tiptop_server", recording_id=timestamp, spawn=self._rerun_mode == "stream")
+                rr.init("tiptop_server", recording_id=run_id, spawn=self._rerun_mode == "stream")
                 if self._rerun_mode == "save":
                     rrd_path = save_dir / "tiptop.rrd"
                     rr.save(rrd_path)
                     _log.info(f"Saving Rerun stream to {rrd_path}")
                 rerun_robot = get_robot_rerun()
 
-            _log.info(f"Processing: RGB shape={rgb.shape}, depth shape={depth.shape}, task='{task_instruction}'")
+            _log.info(f"[run_id={run_id}] Processing: RGB shape={rgb.shape}, depth shape={depth.shape}, task='{task_instruction}'")
             if rerun_robot is not None:
                 rerun_robot.set_joint_positions(q_init)
 
@@ -316,6 +320,7 @@ class TiptopPlanningServer:
                     "success": False,
                     "plan": None,
                     "error": f"cuTAMP failed to find a plan: {failure_reason}",
+                    "run_id": run_id,
                 }
 
             serialized_plan = serialize_plan(cutamp_plan, q_init)
@@ -327,22 +332,25 @@ class TiptopPlanningServer:
                 "success": True,
                 "plan": serialized_plan,
                 "error": None,
+                "run_id": run_id,
             }
 
         except Exception as e:
-            _log.exception("Pipeline error")
+            _log.exception(f"[run_id={run_id}] Pipeline error")
             if not failure_reason:
                 failure_reason = str(e)
             return {
                 "success": False,
                 "plan": None,
                 "error": str(e),
+                "run_id": run_id,
             }
         finally:
             if env is not None and processed_scene is not None:
                 save_run_outputs(save_dir, env, processed_scene.grasps)
             save_run_metadata(
                 save_dir=save_dir,
+                run_id=run_id,
                 timestamp=iso_timestamp,
                 task_instruction=task_instruction,
                 q_at_capture=observation.q_init if observation is not None else None,

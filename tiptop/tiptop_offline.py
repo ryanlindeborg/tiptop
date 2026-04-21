@@ -10,6 +10,7 @@ import json
 import logging
 import os
 import time
+import uuid
 from datetime import datetime
 from pathlib import Path
 
@@ -90,6 +91,7 @@ def run_tiptop(
     robot_rr = get_robot_rerun()
     robot_rr.set_joint_positions(observation.q_init)
 
+    run_id = str(uuid.uuid4())
     timestamp = datetime.now()
     save_dir = Path(output_dir) / timestamp.strftime("%Y-%m-%d_%H-%M-%S")
     save_dir.mkdir(parents=True, exist_ok=True)
@@ -134,6 +136,7 @@ def run_tiptop(
             save_run_outputs(save_dir, env, processed_scene.grasps)
             save_run_metadata(
                 save_dir=save_dir,
+                run_id=run_id,
                 timestamp=timestamp.isoformat(timespec="seconds"),
                 task_instruction=task_instruction,
                 q_at_capture=observation.q_init,
@@ -390,3 +393,7 @@ def rerun_entrypoint():
     else:
         os._exit(0)
 
+
+if __name__ == '__main__':
+    # h5_entrypoint()
+    rerun_entrypoint()

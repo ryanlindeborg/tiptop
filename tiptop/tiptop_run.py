@@ -4,6 +4,7 @@ import shutil
 import signal
 import sys
 import time
+import uuid
 from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass
 from datetime import datetime
@@ -538,11 +539,12 @@ async def async_entrypoint(container: _DemoContainer, config: TAMPConfiguration,
                 task_instruction = _get_task_instruction()  # Let UserExitException propagate
                 _log.info(f"User entered instruction: {task_instruction}")
 
+                run_id = str(uuid.uuid4())
                 now = datetime.now()
                 timestamp = now.strftime("%Y-%m-%d_%H-%M-%S")
                 iso_timestamp = now.isoformat(timespec="seconds")
                 date_str = now.strftime("%Y-%m-%d")
-                rr.init("tiptop_run", recording_id=timestamp, spawn=True)
+                rr.init("tiptop_run", recording_id=run_id, spawn=True)
                 # Log workspace for visualization purposes
                 robot_rr = get_robot_rerun()
                 for obj in workspace_cuboids():
@@ -623,6 +625,7 @@ async def async_entrypoint(container: _DemoContainer, config: TAMPConfiguration,
                         save_run_outputs(save_dir, env, processed_scene.grasps)
                         save_run_metadata(
                             save_dir=save_dir,
+                            run_id=run_id,
                             timestamp=iso_timestamp,
                             task_instruction=task_instruction,
                             q_at_capture=observation.q_init,
