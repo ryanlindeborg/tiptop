@@ -59,7 +59,7 @@ def detect_and_translate(
     task_instruction: str,
     client: genai.Client | None = None,
     model_id: str = "gemini-robotics-er-1.6-preview",
-    temperature: float | None = None,
+    temperature: float | None = 0.5,
 ) -> tuple[list[dict], list[dict]]:
     """Detect objects and translate task in a single Gemini API call.
 
@@ -92,7 +92,7 @@ async def detect_and_translate_async(
     task_instruction: str,
     client: genai.Client | None = None,
     model_id: str = "gemini-robotics-er-1.6-preview",
-    temperature: float | None = None,
+    temperature: float | None = 0.5,
 ) -> tuple[list[dict], list[dict]]:
     """Asynchronously detect objects and translate task in a single Gemini API call.
 
