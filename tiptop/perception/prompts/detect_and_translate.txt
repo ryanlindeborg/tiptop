@@ -18,6 +18,9 @@ Translate this natural language instruction into some conjunction of formal pred
 AVAILABLE PREDICATES:
 - on(movable, surface): Object A is placed on top of object B
 - holding(movable): The robot is holding the named object
+- near(movable, reference): Object A is placed laterally close to (next to / beside / near / adjacent to) object B, on the same support surface (defaults to the table). Object B is a positional reference, NOT a placement target — A is not stacked on B.
+
+Only use `on(A, B)` when B is clearly a support surface or container (table, tray, plate, bin, shelf). For spatial reference language ("next to", "beside", "near", "adjacent to"), use `near(A, B)` instead, even if B is another regular object. Do not emit both `on(A, B)` and `near(A, B)` for the same pair.
 
 It is very important that the goal is exact: use your visual recognition, common-sense and reasoning abilities to make sure the goal expression is perfectly accurate.
 
@@ -37,6 +40,14 @@ Another example - for the task "pick up the apple" when there is a red apple, a 
 ]
 
 This is because the task is to pick up/grab/hold an object, not to place it somewhere.
+
+Another example - for the task "place the cup next to the apple" when both are on the table, the goal should be:
+
+"predicates": [
+        {{"name": "near", "args": ["cup", "red_apple"]}},
+]
+
+The cup will be placed on the table (the default support surface) laterally close to the apple. Do NOT use `on(cup, red_apple)` — the apple is a positional reference, not a surface to stack on.
 
 
 Return a single JSON object with this structure (no code fencing):

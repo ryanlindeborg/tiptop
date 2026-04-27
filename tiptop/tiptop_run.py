@@ -21,7 +21,7 @@ from curobo.wrap.reacher.ik_solver import IKSolver
 from curobo.wrap.reacher.motion_gen import MotionGen
 from cutamp.config import TAMPConfiguration
 from cutamp.envs import TAMPEnvironment
-from cutamp.tamp_domain import HandEmpty, Holding, On
+from cutamp.tamp_domain import HandEmpty, Holding, Near, On
 from cutamp.utils.rerun_utils import log_curobo_mesh_to_rerun
 from jaxtyping import Bool, Float
 from scipy.spatial import KDTree
@@ -243,6 +243,11 @@ def create_tamp_environment(
     has_holding = any(atom["predicate"] == "holding" for atom in grounded_atoms)
     if not has_holding:
         goal_state.add(HandEmpty.ground())
+    movables_with_on_goal = {
+        atom["args"][0]
+        for atom in grounded_atoms
+        if atom["predicate"] == "on" and len(atom["args"]) == 2
+    }
     for atom in grounded_atoms:
         if atom["predicate"] == "on" and len(atom["args"]) == 2:
             movable_label, surface_label = atom["args"]
@@ -252,6 +257,15 @@ def create_tamp_environment(
             movable_label = atom["args"][0]
             goal_state.add(Holding.ground(movable_label))
             _log.info(f"Goal: holding {movable_label}")
+        elif atom["predicate"] == "near" and len(atom["args"]) == 2:
+            movable_label, reference_label = atom["args"]
+            goal_state.add(Near.ground(movable_label, reference_label))
+            _log.info(f"Goal: {movable_label} near {reference_label}")
+            # Default placement target: place on the table when no explicit `on` was given.
+            if movable_label not in movables_with_on_goal:
+                goal_state.add(On.ground(movable_label, table_cuboid.name))
+                movables_with_on_goal.add(movable_label)
+                _log.info(f"Goal (auto-injected): {movable_label} on {table_cuboid.name}")
 
     # All surfaces include table and detected surface objects
     all_surfaces = [table_cuboid, *surfaces]
