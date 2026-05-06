@@ -27,10 +27,18 @@ def categorize_failure(reason: str) -> str:
     return reason  # fall through — keep raw string as its own bucket
 
 
-def analyze_directory(root: Path) -> None:
-    """Analyze all run subdirectories under *root* and print aggregate metrics."""
-    subdirs = sorted(p for p in root.iterdir() if p.is_dir())
+def analyze_directory(root: Path, subdirs: list[Path] | None = None, label: str | None = None) -> None:
+    """Analyze run subdirectories and print aggregate metrics.
+
+    If *subdirs* is provided, analyze only those directories (useful when
+    segmenting by benchmark). Otherwise analyze every subdirectory of *root*.
+    *label* customizes the report header (defaults to *root*).
+    """
+    if subdirs is None:
+        subdirs = sorted(p for p in root.iterdir() if p.is_dir())
     total = len(subdirs)
+    if total == 0:
+        return
 
     success_count = 0
     failure_count = 0
@@ -51,8 +59,12 @@ def analyze_directory(root: Path) -> None:
             missing_metadata_count += 1
             continue
 
-        with open(meta_path) as f:
-            meta = json.load(f)
+        try:
+            with open(meta_path) as f:
+                meta = json.load(f)
+        except json.JSONDecodeError:
+            missing_metadata_count += 1
+            continue
 
         # Grounded atoms
         atoms = meta.get("perception", {}).get("grounded_atoms")
@@ -75,7 +87,7 @@ def analyze_directory(root: Path) -> None:
 
     # --- Print report ---
     print(f"\n{'=' * 60}")
-    print(f"Results for: {root}")
+    print(f"Results for: {label or root}")
     print(f"{'=' * 60}")
 
     print(f"\n--- Overall ---")
@@ -174,13 +186,56 @@ def analyze_directory(root: Path) -> None:
 def main():
     parser = argparse.ArgumentParser(description="Analyze TiPToP result directories.")
     parser.add_argument("dirs", nargs="+", type=Path, help="Root directories containing run subdirectories")
+    parser.add_argument(
+        "--benchmark-map",
+        type=Path,
+        default=None,
+        help="Optional JSON file mapping run_id -> benchmark_name (see build_benchmark_map.py). "
+        "When provided, prints one report per benchmark plus an 'Unmapped' bucket.",
+    )
+    parser.add_argument(
+        "--aggregate",
+        action="store_true",
+        help="With --benchmark-map: print a single combined report over only the mapped runs "
+        "(i.e. unmapped run directories are excluded entirely).",
+    )
     args = parser.parse_args()
+
+    if args.aggregate and args.benchmark_map is None:
+        parser.error("--aggregate requires --benchmark-map")
+
+    benchmark_map: dict[str, str] | None = None
+    if args.benchmark_map is not None:
+        with open(args.benchmark_map) as f:
+            benchmark_map = json.load(f)
+        print(f"Loaded {len(benchmark_map)} run_id -> benchmark mappings from {args.benchmark_map}")
 
     for d in args.dirs:
         if not d.is_dir():
             print(f"WARNING: {d} is not a directory, skipping.")
             continue
-        analyze_directory(d)
+
+        if benchmark_map is None:
+            analyze_directory(d)
+            continue
+
+        # Group subdirectories by benchmark name (using dir name == run_id).
+        groups: dict[str, list[Path]] = {}
+        for sub in sorted(p for p in d.iterdir() if p.is_dir()):
+            bench = benchmark_map.get(sub.name, "<unmapped>")
+            groups.setdefault(bench, []).append(sub)
+
+        if args.aggregate:
+            mapped = [sub for bench, subs in groups.items() if bench != "<unmapped>" for sub in subs]
+            n_benches = sum(1 for bench in groups if bench != "<unmapped>")
+            analyze_directory(
+                d,
+                subdirs=mapped,
+                label=f"{d}  [aggregated across {n_benches} benchmarks, {len(mapped)} runs]",
+            )
+        else:
+            for bench in sorted(groups):
+                analyze_directory(d, subdirs=groups[bench], label=f"{d}  [benchmark={bench}]")
 
 
 if __name__ == "__main__":
