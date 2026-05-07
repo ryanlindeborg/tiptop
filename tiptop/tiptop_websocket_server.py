@@ -56,6 +56,7 @@ class TiptopPlanningServer:
         max_planning_time: float = 60.0,
         rerun_mode: str = "stream",
         include_workspace: bool = False,
+        plan_to_initial_conf: bool = False,
     ) -> None:
         if rerun_mode not in {"stream", "save", "disabled"}:
             raise ValueError(f"Invalid rerun mode: {rerun_mode}")
@@ -69,6 +70,7 @@ class TiptopPlanningServer:
             "version": "0.1.0",
             "num_particles": num_particles,
             "max_planning_time": max_planning_time,
+            "plan_to_initial_conf": plan_to_initial_conf,
         }
         self._cfg = tiptop_cfg()
 
@@ -82,6 +84,7 @@ class TiptopPlanningServer:
             opt_steps=500,
             robot_type=self._cfg.robot.type,
             time_dilation_factor=self._cfg.robot.time_dilation_factor,
+            plan_to_initial_conf=plan_to_initial_conf,
         )
         self._output_dir = Path("tiptop_server_outputs")
         self._pipeline_lock = asyncio.Lock()
@@ -313,6 +316,7 @@ class TiptopPlanningServer:
                 processed_scene.grasps,
                 self._motion_gen,
                 all_surfaces,
+                experiment_dir=save_dir / "cutamp",
             )
 
             if cutamp_plan is None:
@@ -373,6 +377,7 @@ def _run_server(
     rerun_mode: str = "stream",
     include_workspace: bool = False,
     m2t2_apply_bounds: bool = True,
+    plan_to_initial_conf: bool = False,
 ) -> None:
     """Tiptop websocket planning server.
 
@@ -384,6 +389,7 @@ def _run_server(
         rerun_mode: Rerun visualization mode. 'stream' spawns the Rerun viewer; 'save' writes .rrd files to disk; 'disabled' skips all Rerun logging.
         include_workspace: If True, include real-robot workspace cuboids in the collision world.
         m2t2_apply_bounds: If False, skip M2T2 workspace bounds filtering (e.g. in sim).
+        plan_to_initial_conf: If True, append a final motion-plan segment back to the initial joint configuration at the end of each trajectory.
     """
     print_tiptop_banner()
     check_cutamp_version()
@@ -399,6 +405,7 @@ def _run_server(
         max_planning_time=max_planning_time,
         rerun_mode=rerun_mode,
         include_workspace=include_workspace,
+        plan_to_initial_conf=plan_to_initial_conf,
     )
     exit_code = 1
     try:

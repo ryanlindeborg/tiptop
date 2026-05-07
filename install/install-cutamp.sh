@@ -11,22 +11,19 @@ fi
 
 REPO_URL="https://github.com/tiptop-robot/cuTAMP.git"
 INSTALL_DIR="cutamp"
-REQUIRED_VERSION=$(python -c "
-import re
-m = re.search(r'REQUIRED_CUTAMP_VERSION = \"([^\"]+)\"', open('tiptop/utils.py').read())
-print(m.group(1))
-")
+BRANCH="will/new-fixes"
 
-echo "==> Installing cuTAMP v$REQUIRED_VERSION..."
+echo "==> Installing cuTAMP from branch $BRANCH..."
 
 # Check if directory exists and is a healthy git repo
 should_clone=true
 if [ -d "$INSTALL_DIR" ]; then
     cd "$INSTALL_DIR"
     if git fsck --full &> /dev/null; then
-        echo "Updating existing cuTAMP repository to v$REQUIRED_VERSION..."
-        git fetch --tags
-        git checkout "v$REQUIRED_VERSION"
+        echo "Updating existing cuTAMP repository to latest $BRANCH..."
+        git fetch origin "$BRANCH"
+        git checkout "$BRANCH"
+        git pull origin "$BRANCH"
         should_clone=false
         cd ..
     else
@@ -36,10 +33,10 @@ if [ -d "$INSTALL_DIR" ]; then
     fi
 fi
 
-# Clone at the required version tag
+# Clone the branch
 if [ "$should_clone" = true ]; then
-    echo "Cloning cuTAMP v$REQUIRED_VERSION..."
-    git clone --branch "v$REQUIRED_VERSION" "$REPO_URL" "$INSTALL_DIR"
+    echo "Cloning cuTAMP branch $BRANCH..."
+    git clone --branch "$BRANCH" "$REPO_URL" "$INSTALL_DIR"
 fi
 
 # Install
@@ -47,4 +44,4 @@ cd "$INSTALL_DIR"
 echo "Installing cuTAMP..."
 pip install -e . --no-build-isolation --no-deps
 cd ..
-echo "✓ cuTAMP v$REQUIRED_VERSION installed successfully"
+echo "✓ cuTAMP ($BRANCH) installed successfully"

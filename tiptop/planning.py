@@ -48,6 +48,7 @@ def build_tamp_config(
     time_dilation_factor: float,
     collision_activation_distance: float = 0.0,
     enable_visualizer: bool = False,
+    plan_to_initial_conf: bool = False,
 ) -> TAMPConfiguration:
     """Build a TAMPConfiguration with TiPToP defaults.
 
@@ -74,6 +75,7 @@ def build_tamp_config(
         placement_shrink_dist=0.01,
         enable_visualizer=enable_visualizer,
         coll_sphere_radius=0.008,
+        plan_to_initial_conf=plan_to_initial_conf,
     )
 
 
