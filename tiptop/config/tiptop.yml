@@ -61,3 +61,7 @@ perception:
   contact_threshold_m: 0.01      # Grasp-object association distance threshold
   mask_erosion_pixels: 3         # Pixels to erode segmentation masks to reduce noise
 
+# == Experimental features ==
+experimental:
+  enable_pick_place_next_to: false
+

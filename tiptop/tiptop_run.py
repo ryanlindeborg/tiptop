@@ -250,20 +250,14 @@ def create_tamp_environment(
 
     # Create goal state from grounded atoms
     goal_state: set = set()
-    has_holding = any(atom["predicate"] == "holding" for atom in grounded_atoms)
-    if not has_holding:
-        goal_state.add(HandEmpty.ground())
-    movables_with_on_goal = {
-        atom["args"][0]
-        for atom in grounded_atoms
-        if atom["predicate"] == "on" and len(atom["args"]) == 2
-    }
+    has_holding = False
     for atom in grounded_atoms:
         if atom["predicate"] == "on" and len(atom["args"]) == 2:
             movable_label, surface_label = atom["args"]
             goal_state.add(On.ground(movable_label, surface_label))
             _log.info(f"Goal: {movable_label} on {surface_label}")
         elif atom["predicate"] == "holding" and len(atom["args"]) == 1:
+            has_holding = True
             movable_label = atom["args"][0]
             goal_state.add(Holding.ground(movable_label))
             _log.info(f"Goal: holding {movable_label}")
@@ -271,11 +265,8 @@ def create_tamp_environment(
             movable_label, reference_label = atom["args"]
             goal_state.add(Near.ground(movable_label, reference_label))
             _log.info(f"Goal: {movable_label} near {reference_label}")
-            # Default placement target: place on the table when no explicit `on` was given.
-            if movable_label not in movables_with_on_goal:
-                goal_state.add(On.ground(movable_label, table_cuboid.name))
-                movables_with_on_goal.add(movable_label)
-                _log.info(f"Goal (auto-injected): {movable_label} on {table_cuboid.name}")
+    if not has_holding:
+        goal_state.add(HandEmpty.ground())
 
     # All surfaces include table and detected surface objects
     all_surfaces = [table_cuboid, *surfaces]
