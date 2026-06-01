@@ -17,6 +17,7 @@ from cutamp.scripts.utils import default_constraint_to_mult, default_constraint_
 from cutamp.task_planning.constraints import StablePlacement
 from jaxtyping import Float
 
+from tiptop.config import tiptop_cfg
 from tiptop.utils import NumpyEncoder
 
 _log = logging.getLogger(__name__)
@@ -74,6 +75,7 @@ def build_tamp_config(
         placement_shrink_dist=0.01,
         enable_visualizer=enable_visualizer,
         coll_sphere_radius=0.008,
+        near_placement=tiptop_cfg().experimental.pick_place_next_to,
     )
 
 
