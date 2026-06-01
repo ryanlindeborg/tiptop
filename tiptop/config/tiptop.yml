@@ -63,5 +63,5 @@ perception:
 
 # == Experimental features ==
 experimental:
-  enable_pick_place_next_to: false
+  pick_place_next_to: false
 

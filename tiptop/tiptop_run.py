@@ -265,6 +265,8 @@ def create_tamp_environment(
             movable_label, reference_label = atom["args"]
             goal_state.add(Near.ground(movable_label, reference_label))
             _log.info(f"Goal: {movable_label} near {reference_label}")
+        else:
+            _log.warning(f"Ignoring unexpected grounded atom from Gemini: {atom}")
     if not has_holding:
         goal_state.add(HandEmpty.ground())
 
