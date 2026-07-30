@@ -63,5 +63,5 @@ perception:
 
 # == Experimental features ==
 experimental:
-  pick_place_next_to: false
+  pick_place_next_to: false  # "Place X next to Y" support; targets combined xy half-extents + 3 cm gap (5 cm constraint tolerance)
 
