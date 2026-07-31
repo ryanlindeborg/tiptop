@@ -262,6 +262,9 @@ def create_tamp_environment(
             goal_state.add(Holding.ground(movable_label))
             _log.info(f"Goal: holding {movable_label}")
         elif atom["predicate"] == "near" and len(atom["args"]) == 2:
+            # KNOWN LIMITATION: if reference_label is a surface (e.g. "put X in the bowl and Y
+            # next to the bowl"), cuTAMP rejects the goal because PlaceNear's reference must be a
+            # movable. See https://github.com/tiptop-robot/cuTAMP/issues/26
             movable_label, reference_label = atom["args"]
             goal_state.add(Near.ground(movable_label, reference_label))
             _log.info(f"Goal: {movable_label} near {reference_label}")
