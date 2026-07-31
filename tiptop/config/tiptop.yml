@@ -63,6 +63,8 @@ perception:
 
 # == Experimental features ==
 experimental:
-  # Enables "place X next to Y" goals via the Near(x, y) predicate in cuTAMP.
-  # Keeps X within a short distance of Y (~5cm of clearance) by comparing their xy half-extents + 3cm gap.
+  # Enables "place X next to Y" goals via the Near(x, y) predicate in cuTAMP: X is placed
+  # laterally next to Y. Placement distance tolerances default to cuTAMP's NearPlacement
+  # values — see default_constraint_to_tol in
+  # https://github.com/tiptop-robot/cuTAMP/blob/main/cutamp/scripts/utils.py
   pick_place_next_to: false
